@@ -28,7 +28,7 @@ const (
 
 var (
 	schema = []string{
-		`CREATE TABLE IF NOT EXISTS kine
+		`CREATE TABLE IF NOT EXISTS ` + generic.TableName + `
  			(
  				id SERIAL PRIMARY KEY,
 				name VARCHAR(630),
@@ -40,11 +40,11 @@ var (
  				value bytea,
  				old_value bytea
  			);`,
-		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name)`,
-		`CREATE INDEX IF NOT EXISTS kine_name_id_index ON kine (name,id)`,
-		`CREATE INDEX IF NOT EXISTS kine_id_deleted_index ON kine (id,deleted)`,
-		`CREATE INDEX IF NOT EXISTS kine_prev_revision_index ON kine (prev_revision)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (name, prev_revision)`,
+		`CREATE INDEX IF NOT EXISTS kine_name_index ON ` + generic.TableName + ` (name)`,
+		`CREATE INDEX IF NOT EXISTS kine_name_id_index ON ` + generic.TableName + ` (name,id)`,
+		`CREATE INDEX IF NOT EXISTS kine_id_deleted_index ON ` + generic.TableName + ` (id,deleted)`,
+		`CREATE INDEX IF NOT EXISTS kine_prev_revision_index ON ` + generic.TableName + ` (prev_revision)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON ` + generic.TableName + ` (name, prev_revision)`,
 	}
 	createDB = "CREATE DATABASE "
 )
@@ -63,19 +63,19 @@ func New(ctx context.Context, dataSourceName string, tlsInfo tls.Config, connPoo
 	if err != nil {
 		return nil, err
 	}
-	dialect.GetSizeSQL = `SELECT pg_total_relation_size('kine')`
+	dialect.GetSizeSQL = `SELECT pg_total_relation_size('` + generic.TableName + `')`
 	dialect.CompactSQL = `
-		DELETE FROM kine AS kv
+		DELETE FROM ` + generic.TableName + ` AS kv
 		USING	(
 			SELECT kp.prev_revision AS id
-			FROM kine AS kp
+			FROM ` + generic.TableName + ` AS kp
 			WHERE
 				kp.name != 'compact_rev_key' AND
 				kp.prev_revision != 0 AND
 				kp.id <= $1
 			UNION
 			SELECT kd.id AS id
-			FROM kine AS kd
+			FROM ` + generic.TableName + ` AS kd
 			WHERE
 				kd.deleted != 0 AND
 				kd.id <= $2

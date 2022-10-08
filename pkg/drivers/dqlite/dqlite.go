@@ -124,7 +124,7 @@ func New(ctx context.Context, datasourceName string, connPoolConfig generic.Conn
 }
 
 func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {
-	row := newDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM kine")
+	row := newDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+generic.TableName)
 	var count int64
 	if err := row.Scan(&count); err != nil {
 		return err
@@ -143,7 +143,7 @@ func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {
 	}
 	defer oldDB.Close()
 
-	oldData, err := oldDB.QueryContext(ctx, "SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value FROM kine")
+	oldData, err := oldDB.QueryContext(ctx, "SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value FROM "+generic.TableName)
 	if err != nil {
 		logrus.Errorf("failed to find old data to migrate: %v", err)
 		return nil
@@ -178,7 +178,7 @@ func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {
 			return err
 		}
 
-		if _, err := newDB.ExecContext(ctx, "INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value) values(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		if _, err := newDB.ExecContext(ctx, "INSERT INTO "+generic.TableName+"(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value) values(?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			row...); err != nil {
 			return err
 		}

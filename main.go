@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/k3s-io/kine/pkg/drivers/generic"
 	"github.com/k3s-io/kine/pkg/endpoint"
 	"github.com/k3s-io/kine/pkg/metrics"
 	"github.com/k3s-io/kine/pkg/version"
@@ -35,6 +36,11 @@ func main() {
 			Name:        "endpoint",
 			Usage:       "Storage endpoint (default is sqlite)",
 			Destination: &config.Endpoint,
+		},
+		cli.StringFlag{
+			Name:        "table-name",
+			Usage:       "Storage table name (default is kine).",
+			Destination: &generic.TableName,
 		},
 		cli.StringFlag{
 			Name:        "ca-file",

@@ -26,7 +26,7 @@ import (
 
 var (
 	schema = []string{
-		`CREATE TABLE IF NOT EXISTS kine
+		`CREATE TABLE IF NOT EXISTS ` + generic.TableName + `
 			(
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				name INTEGER,
@@ -38,11 +38,11 @@ var (
 				value BLOB,
 				old_value BLOB
 			)`,
-		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name)`,
-		`CREATE INDEX IF NOT EXISTS kine_name_id_index ON kine (name,id)`,
-		`CREATE INDEX IF NOT EXISTS kine_id_deleted_index ON kine (id,deleted)`,
-		`CREATE INDEX IF NOT EXISTS kine_prev_revision_index ON kine (prev_revision)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (name, prev_revision)`,
+		`CREATE INDEX IF NOT EXISTS kine_name_index ON ` + generic.TableName + ` (name)`,
+		`CREATE INDEX IF NOT EXISTS kine_name_id_index ON ` + generic.TableName + ` (name,id)`,
+		`CREATE INDEX IF NOT EXISTS kine_id_deleted_index ON ` + generic.TableName + ` (id,deleted)`,
+		`CREATE INDEX IF NOT EXISTS kine_prev_revision_index ON ` + generic.TableName + ` (prev_revision)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON ` + generic.TableName + ` (name, prev_revision)`,
 		`PRAGMA wal_checkpoint(TRUNCATE)`,
 	}
 )
@@ -68,18 +68,18 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connPool
 	dialect.LastInsertID = true
 	dialect.GetSizeSQL = `SELECT SUM(pgsize) FROM dbstat`
 	dialect.CompactSQL = `
-		DELETE FROM kine AS kv
+		DELETE FROM ` + generic.TableName + ` AS kv
 		WHERE
 			kv.id IN (
 				SELECT kp.prev_revision AS id
-				FROM kine AS kp
+				FROM ` + generic.TableName + ` AS kp
 				WHERE
 					kp.name != 'compact_rev_key' AND
 					kp.prev_revision != 0 AND
 					kp.id <= ?
 				UNION
 				SELECT kd.id AS id
-				FROM kine AS kd
+				FROM ` + generic.TableName + ` AS kd
 				WHERE
 					kd.deleted != 0 AND
 					kd.id <= ?

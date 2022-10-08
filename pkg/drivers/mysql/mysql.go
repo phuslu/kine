@@ -25,7 +25,7 @@ const (
 
 var (
 	schema = []string{
-		`CREATE TABLE IF NOT EXISTS kine
+		`CREATE TABLE IF NOT EXISTS ` + generic.TableName + `
 			(
 				id INTEGER AUTO_INCREMENT,
 				name VARCHAR(630) CHARACTER SET ascii,
@@ -38,11 +38,11 @@ var (
 				old_value MEDIUMBLOB,
 				PRIMARY KEY (id)
 			);`,
-		`CREATE INDEX kine_name_index ON kine (name)`,
-		`CREATE INDEX kine_name_id_index ON kine (name,id)`,
-		`CREATE INDEX kine_id_deleted_index ON kine (id,deleted)`,
-		`CREATE INDEX kine_prev_revision_index ON kine (prev_revision)`,
-		`CREATE UNIQUE INDEX kine_name_prev_revision_uindex ON kine (name, prev_revision)`,
+		`CREATE INDEX kine_name_index ON ` + generic.TableName + ` (name)`,
+		`CREATE INDEX kine_name_id_index ON ` + generic.TableName + ` (name,id)`,
+		`CREATE INDEX kine_id_deleted_index ON ` + generic.TableName + ` (id,deleted)`,
+		`CREATE INDEX kine_prev_revision_index ON ` + generic.TableName + ` (prev_revision)`,
+		`CREATE UNIQUE INDEX kine_name_prev_revision_uindex ON ` + generic.TableName + ` (name, prev_revision)`,
 	}
 	createDB = "CREATE DATABASE IF NOT EXISTS "
 )
@@ -75,19 +75,19 @@ func New(ctx context.Context, dataSourceName string, tlsInfo tls.Config, connPoo
 	dialect.GetSizeSQL = `
 		SELECT SUM(data_length + index_length)
 		FROM information_schema.TABLES
-		WHERE table_schema = DATABASE() AND table_name = 'kine'`
+		WHERE table_schema = DATABASE() AND table_name = '` + generic.TableName + `'`
 	dialect.CompactSQL = `
-		DELETE kv FROM kine AS kv
+		DELETE kv FROM ` + generic.TableName + ` AS kv
 		INNER JOIN (
 			SELECT kp.prev_revision AS id
-			FROM kine AS kp
+			FROM ` + generic.TableName + ` AS kp
 			WHERE
 				kp.name != 'compact_rev_key' AND
 				kp.prev_revision != 0 AND
 				kp.id <= ?
 			UNION
 			SELECT kd.id AS id
-			FROM kine AS kd
+			FROM ` + generic.TableName + ` AS kd
 			WHERE
 				kd.deleted != 0 AND
 				kd.id <= ?
@@ -191,10 +191,10 @@ func prepareDSN(dataSourceName string, tlsConfig *cryptotls.Config) (string, err
 	}
 	// setting up tlsConfig
 	if tlsConfig != nil {
-		if err := mysql.RegisterTLSConfig("kine", tlsConfig); err != nil {
+		if err := mysql.RegisterTLSConfig(generic.TableName, tlsConfig); err != nil {
 			return "", err
 		}
-		config.TLSConfig = "kine"
+		config.TLSConfig = generic.TableName
 	}
 	dbName := "kubernetes"
 	if len(config.DBName) > 0 {

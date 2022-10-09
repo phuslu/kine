@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
 )
 
 var TableName = func() string {
@@ -33,6 +34,8 @@ var TableName = func() string {
 	}
 	return "kine"
 }()
+
+var CompressionPrefixes cli.StringSlice
 
 const (
 	defaultMaxIdleConns = 2 // copied from database/sql

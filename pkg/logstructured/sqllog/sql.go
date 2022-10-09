@@ -3,12 +3,16 @@ package sqllog
 import (
 	"context"
 	"database/sql"
+	"reflect"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/k3s-io/kine/pkg/broadcaster"
+	"github.com/k3s-io/kine/pkg/drivers/generic"
 	"github.com/k3s-io/kine/pkg/metrics"
 	"github.com/k3s-io/kine/pkg/server"
+	"github.com/klauspost/compress/zstd"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -19,6 +23,11 @@ const (
 	compactMinRetain = 1000
 	compactBatchSize = 1000
 	pollBatchSize    = 500
+)
+
+var (
+	zstdEncoder, _ = zstd.NewWriter(nil)
+	zstdDecoder, _ = zstd.NewReader(nil)
 )
 
 type SQLLog struct {
@@ -544,13 +553,35 @@ func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error)
 		e.PrevKV = &server.KeyValue{}
 	}
 
+	value := e.KV.Value
+	for _, prefix := range generic.CompressionPrefixes {
+		if prefix == "*" || (prefix != "" && strings.HasPrefix(e.KV.Key, prefix)) {
+			dst := make([]byte, 5, len(value)+5)
+			dst[4] = 0
+			dst[3] = 'd'
+			dst[2] = 't'
+			dst[1] = 's'
+			dst[0] = 'z'
+			out := zstdEncoder.EncodeAll(value, dst[5:])
+			hdr := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
+			if n := len(out); n <= hdr.Cap-hdr.Len {
+				hdr.Len += n
+			} else {
+				dst = append([]byte("zstd\x00"), out...)
+			}
+			value = dst
+
+			break
+		}
+	}
+
 	rev, err := s.d.Insert(ctx, e.KV.Key,
 		e.Create,
 		e.Delete,
 		e.KV.CreateRevision,
 		e.PrevKV.ModRevision,
 		e.KV.Lease,
-		e.KV.Value,
+		value,
 		e.PrevKV.Value,
 	)
 	if err != nil {
@@ -569,6 +600,18 @@ func scan(rows *sql.Rows, rev *int64, compact *int64, event *server.Event) error
 
 	c := &sql.NullInt64{}
 
+	decode := func(data []byte) ([]byte, error) {
+		if len(data) >= 5 &&
+			data[4] == 0 &&
+			data[3] == 'd' &&
+			data[2] == 't' &&
+			data[1] == 's' &&
+			data[0] == 'z' {
+			return zstdDecoder.DecodeAll(data[5:], nil)
+		}
+		return data, nil
+	}
+
 	err := rows.Scan(
 		rev,
 		c,
@@ -583,6 +626,13 @@ func scan(rows *sql.Rows, rev *int64, compact *int64, event *server.Event) error
 		&event.PrevKV.Value,
 	)
 	if err != nil {
+		return err
+	}
+
+	if event.KV.Value, err = decode(event.KV.Value); err != nil {
+		return err
+	}
+	if event.PrevKV.Value, err = decode(event.PrevKV.Value); err != nil {
 		return err
 	}
 

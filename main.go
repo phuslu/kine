@@ -42,6 +42,11 @@ func main() {
 			Usage:       "Storage table name (default is kine).",
 			Destination: &generic.TableName,
 		},
+		cli.StringSliceFlag{
+			Name:  "compression-prefixes",
+			Usage: "Storage compression prefixes.",
+			Value: &generic.CompressionPrefixes,
+		},
 		cli.StringFlag{
 			Name:        "ca-file",
 			Usage:       "CA cert for DB connection",

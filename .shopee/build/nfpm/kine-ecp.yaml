@@ -1,0 +1,15 @@
+# nfpm example config file
+#
+# check https://nfpm.goreleaser.com/configuration for detailed usage
+#
+name: "kine-ecp"
+arch: "amd64"
+platform: "linux"
+version: "__PACKAGE_VERSION__"
+version_schema: none
+maintainer: "EKS Team"
+description: |
+  Run Kubernetes on MySQL. (An Internal LTS runC Distributions Maintained By EKS)
+contents:
+  - src: /usr/local/bin/kine
+    dst: /usr/local/bin/kine

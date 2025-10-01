@@ -25,6 +25,8 @@ const (
 	defaultMaxIdleConns = 2 // copied from database/sql
 )
 
+var EnableCompression bool
+
 // explicit interface check
 var _ server.Dialect = (*Generic)(nil)
 

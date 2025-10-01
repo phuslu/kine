@@ -5,17 +5,28 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand/v2"
+	"reflect"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/k3s-io/kine/pkg/broadcaster"
+	"github.com/k3s-io/kine/pkg/drivers/generic"
 	"github.com/k3s-io/kine/pkg/metrics"
 	"github.com/k3s-io/kine/pkg/server"
+	"github.com/klauspost/compress/zstd"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 const minCompactBatchSize = 100
+
+const zstdHeader = "zstd\x00"
+
+var (
+	zstdEncoder, _ = zstd.NewWriter(nil)
+	zstdDecoder, _ = zstd.NewReader(nil)
+)
 
 type SQLLog struct {
 	d                     server.Dialect
@@ -610,13 +621,28 @@ func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error)
 		e.PrevKV = &server.KeyValue{}
 	}
 
+	value := e.KV.Value
+
+	if generic.EnableCompression && len(value) != 0 && !strings.HasPrefix(unsafe.String(&value[0], len(value)), zstdHeader) {
+		dst := make([]byte, len(zstdHeader), len(value)+len(zstdHeader))
+		dst = append(dst, zstdHeader...)
+		out := zstdEncoder.EncodeAll(value, dst[len(zstdHeader):])
+		hdr := (*reflect.SliceHeader)(unsafe.Pointer(&dst))
+		if n := len(out); n <= hdr.Cap-hdr.Len {
+			hdr.Len += n
+		} else {
+			dst = append([]byte(zstdHeader), out...)
+		}
+		value = dst
+	}
+
 	rev, err := s.d.Insert(ctx, e.KV.Key,
 		e.Create,
 		e.Delete,
 		e.KV.CreateRevision,
 		e.PrevKV.ModRevision,
 		e.KV.Lease,
-		e.KV.Value,
+		value,
 		e.PrevKV.Value,
 	)
 	if err != nil {
@@ -627,6 +653,13 @@ func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error)
 	default:
 	}
 	return rev, nil
+}
+
+func decompress(data []byte) ([]byte, error) {
+	if generic.EnableCompression && len(data) != 0 && strings.HasPrefix(unsafe.String(&data[0], len(data)), zstdHeader) {
+		return zstdDecoder.DecodeAll(data[len(zstdHeader):], nil)
+	}
+	return data, nil
 }
 
 func scan(rows *sql.Rows, rev *int64, compact *int64, event *server.Event, val, prev bool) error {
@@ -655,6 +688,13 @@ func scan(rows *sql.Rows, rev *int64, compact *int64, event *server.Event, val, 
 
 	err := rows.Scan(dests...)
 	if err != nil {
+		return err
+	}
+
+	if event.KV.Value, err = decompress(event.KV.Value); err != nil {
+		return err
+	}
+	if event.PrevKV.Value, err = decompress(event.PrevKV.Value); err != nil {
 		return err
 	}
 

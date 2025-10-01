@@ -196,6 +196,11 @@ func New() *cli.App {
 			Name:    "debug",
 			EnvVars: []string{"KINE_DEBUG"},
 		},
+		&cli.BoolFlag{
+			Name:        "enable-compression",
+			Usage:       "Enable zstd compression on storage. Default is false.",
+			Destination: &generic.EnableCompression,
+		},
 	}
 	app.Action = run
 	return app

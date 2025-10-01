@@ -27,7 +27,7 @@ const (
 
 var (
 	schema = []string{
-		`CREATE TABLE IF NOT EXISTS kine
+		`CREATE TABLE IF NOT EXISTS ` + generic.TableName + `
 			(
 				id BIGINT UNSIGNED AUTO_INCREMENT,
 				name VARCHAR(630) CHARACTER SET ascii,
@@ -40,14 +40,14 @@ var (
 				old_value MEDIUMBLOB,
 				PRIMARY KEY (id)
 			);`,
-		`CREATE INDEX kine_name_index ON kine (name)`,
-		`CREATE INDEX kine_name_id_index ON kine (name,id)`,
-		`CREATE INDEX kine_id_deleted_index ON kine (id,deleted)`,
-		`CREATE INDEX kine_prev_revision_index ON kine (prev_revision)`,
-		`CREATE UNIQUE INDEX kine_name_prev_revision_uindex ON kine (name, prev_revision)`,
+		`CREATE INDEX kine_name_index ON ` + generic.TableName + ` (name)`,
+		`CREATE INDEX kine_name_id_index ON ` + generic.TableName + ` (name,id)`,
+		`CREATE INDEX kine_id_deleted_index ON ` + generic.TableName + ` (id,deleted)`,
+		`CREATE INDEX kine_prev_revision_index ON ` + generic.TableName + ` (prev_revision)`,
+		`CREATE UNIQUE INDEX kine_name_prev_revision_uindex ON ` + generic.TableName + ` (name, prev_revision)`,
 	}
 	schemaMigrations = []string{
-		`ALTER TABLE kine MODIFY COLUMN id BIGINT UNSIGNED AUTO_INCREMENT, MODIFY COLUMN create_revision BIGINT UNSIGNED, MODIFY COLUMN prev_revision BIGINT UNSIGNED`,
+		`ALTER TABLE ` + generic.TableName + ` MODIFY COLUMN id BIGINT UNSIGNED AUTO_INCREMENT, MODIFY COLUMN create_revision BIGINT UNSIGNED, MODIFY COLUMN prev_revision BIGINT UNSIGNED`,
 		// Creating an empty migration to ensure that postgresql and mysql migrations match up
 		// with each other for a give value of KINE_SCHEMA_MIGRATION env var
 		``,
@@ -83,19 +83,19 @@ func New(ctx context.Context, wg *sync.WaitGroup, cfg *drivers.Config) (bool, se
 	dialect.GetSizeSQL = `
 		SELECT SUM(data_length + index_length)
 		FROM information_schema.TABLES
-		WHERE table_schema = DATABASE() AND table_name = 'kine'`
+		WHERE table_schema = DATABASE() AND table_name = '` + generic.TableName + `'`
 	dialect.CompactSQL = `
-		DELETE kv FROM kine AS kv
+		DELETE kv FROM ` + generic.TableName + ` AS kv
 		INNER JOIN (
 			SELECT kp.prev_revision AS id
-			FROM kine AS kp
+			FROM ` + generic.TableName + ` AS kp
 			WHERE
 				kp.name != 'compact_rev_key' AND
 				kp.prev_revision != 0 AND
 				kp.id <= ?
 			UNION
 			SELECT kd.id AS id
-			FROM kine AS kd
+			FROM ` + generic.TableName + ` AS kd
 			WHERE
 				kd.deleted != 0 AND
 				kd.id <= ?
@@ -127,9 +127,9 @@ func New(ctx context.Context, wg *sync.WaitGroup, cfg *drivers.Config) (bool, se
 func setup(db *sql.DB) error {
 	logrus.Infof("Configuring database table schema and indexes, this may take a moment...")
 	var exists bool
-	err := db.QueryRow("SELECT 1 FROM information_schema.TABLES WHERE table_schema = DATABASE() AND table_name = ?", "kine").Scan(&exists)
+	err := db.QueryRow("SELECT 1 FROM information_schema.TABLES WHERE table_schema = DATABASE() AND table_name = ?", generic.TableName).Scan(&exists)
 	if err != nil && err != sql.ErrNoRows {
-		logrus.Warnf("Failed to check existence of database table %s, going to attempt create: %v", "kine", err)
+		logrus.Warnf("Failed to check existence of database table %s, going to attempt create: %v", generic.TableName, err)
 	}
 
 	if !exists {

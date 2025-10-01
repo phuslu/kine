@@ -31,7 +31,7 @@ const (
 
 var (
 	schema = []string{
-		`CREATE TABLE IF NOT EXISTS kine
+		`CREATE TABLE IF NOT EXISTS ` + generic.TableName + `
  			(
 				id BIGSERIAL PRIMARY KEY,
 				name text COLLATE "C",
@@ -44,18 +44,18 @@ var (
  				old_value bytea
  			);`,
 
-		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name)`,
-		`CREATE INDEX IF NOT EXISTS kine_name_id_index ON kine (name,id)`,
-		`CREATE INDEX IF NOT EXISTS kine_id_deleted_index ON kine (id,deleted)`,
-		`CREATE INDEX IF NOT EXISTS kine_prev_revision_index ON kine (prev_revision)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (name, prev_revision)`,
-		`CREATE INDEX IF NOT EXISTS kine_list_query_index on kine(name, id DESC, deleted)`,
+		`CREATE INDEX IF NOT EXISTS kine_name_index ON ` + generic.TableName + ` (name)`,
+		`CREATE INDEX IF NOT EXISTS kine_name_id_index ON ` + generic.TableName + ` (name,id)`,
+		`CREATE INDEX IF NOT EXISTS kine_id_deleted_index ON ` + generic.TableName + ` (id,deleted)`,
+		`CREATE INDEX IF NOT EXISTS kine_prev_revision_index ON ` + generic.TableName + ` (prev_revision)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON ` + generic.TableName + ` (name, prev_revision)`,
+		`CREATE INDEX IF NOT EXISTS kine_list_query_index on ` + generic.TableName + `(name, id DESC, deleted)`,
 	}
 	schemaMigrations = []string{
-		`ALTER TABLE kine ALTER COLUMN id SET DATA TYPE BIGINT, ALTER COLUMN create_revision SET DATA TYPE BIGINT, ALTER COLUMN prev_revision SET DATA TYPE BIGINT; ALTER SEQUENCE kine_id_seq AS BIGINT`,
+		`ALTER TABLE ` + generic.TableName + ` ALTER COLUMN id SET DATA TYPE BIGINT, ALTER COLUMN create_revision SET DATA TYPE BIGINT, ALTER COLUMN prev_revision SET DATA TYPE BIGINT; ALTER SEQUENCE kine_id_seq AS BIGINT`,
 		// It is important to set the collation to "C" to ensure that LIKE and COMPARISON
 		// queries use the index.
-		`ALTER TABLE kine ALTER COLUMN name SET DATA TYPE TEXT COLLATE "C" USING name::TEXT COLLATE "C"`,
+		`ALTER TABLE ` + generic.TableName + ` ALTER COLUMN name SET DATA TYPE TEXT COLLATE "C" USING name::TEXT COLLATE "C"`,
 	}
 	createDB = `CREATE DATABASE "%s";`
 )
@@ -78,14 +78,14 @@ func New(ctx context.Context, wg *sync.WaitGroup, cfg *drivers.Config) (bool, se
 	withVal := columns + ", kv.value"
 	listFmt := `
 		SELECT
-			(SELECT MAX(rkv.id) AS id FROM kine AS rkv),
-			(SELECT MAX(crkv.prev_revision) AS prev_revision FROM kine AS crkv WHERE crkv.name = 'compact_rev_key'),
+			(SELECT MAX(rkv.id) AS id FROM ` + generic.TableName + ` AS rkv),
+			(SELECT MAX(crkv.prev_revision) AS prev_revision FROM ` + generic.TableName + ` AS crkv WHERE crkv.name = 'compact_rev_key'),
 			maxkv.*
 		FROM (
 			SELECT DISTINCT ON (name)
 				%s
 			FROM
-				kine AS kv
+				` + generic.TableName + ` AS kv
 			WHERE
 				kv.name LIKE ? 
 				%%s
@@ -100,12 +100,12 @@ func New(ctx context.Context, wg *sync.WaitGroup, cfg *drivers.Config) (bool, se
 
 	countSQL := `
 		SELECT
-			(SELECT MAX(rkv.id) AS id FROM kine AS rkv),
+			(SELECT MAX(rkv.id) AS id FROM ` + generic.TableName + ` AS rkv),
 			COUNT(c.theid)
 		FROM (
 			SELECT DISTINCT ON (name)
 				kv.id AS theid, kv.deleted
-			FROM kine AS kv
+			FROM ` + generic.TableName + ` AS kv
 			WHERE
 				kv.name LIKE ?
 				%s
@@ -113,19 +113,19 @@ func New(ctx context.Context, wg *sync.WaitGroup, cfg *drivers.Config) (bool, se
 			) AS c
 		WHERE c.deleted = 0 OR ?
 		`
-	dialect.GetSizeSQL = `SELECT pg_total_relation_size('kine')`
+	dialect.GetSizeSQL = `SELECT pg_total_relation_size('` + generic.TableName + `')`
 	dialect.CompactSQL = `
-		DELETE FROM kine AS kv
+		DELETE FROM ` + generic.TableName + ` AS kv
 		USING	(
 			SELECT kp.prev_revision AS id
-			FROM kine AS kp
+			FROM ` + generic.TableName + ` AS kp
 			WHERE
 				kp.name != 'compact_rev_key' AND
 				kp.prev_revision != 0 AND
 				kp.id <= $1
 			UNION
 			SELECT kd.id AS id
-			FROM kine AS kd
+			FROM ` + generic.TableName + ` AS kd
 			WHERE
 				kd.deleted != 0 AND
 				kd.id <= $2

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/k3s-io/kine/pkg/drivers/generic"
 	"github.com/k3s-io/kine/pkg/endpoint"
 	"github.com/k3s-io/kine/pkg/metrics"
 	"github.com/k3s-io/kine/pkg/signals"
@@ -200,6 +201,12 @@ func New() *cli.App {
 			Name:        "enable-compression",
 			Usage:       "Enable zstd compression on storage. Default is false.",
 			Destination: &generic.EnableCompression,
+		},
+		&cli.StringFlag{
+			Name:        "table-name",
+			Usage:       "Storage table name. Default is kine.",
+			Value:       "kine",
+			Destination: &generic.TableName,
 		},
 	}
 	app.Action = run

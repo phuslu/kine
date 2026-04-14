@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,6 +22,22 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var TableName = func() string {
+	if s := os.Getenv("KINE_TABLE_NAME"); s != "" {
+		return s
+	}
+	for i := 1; i < len(os.Args); i++ {
+		const key = "--table-name"
+		switch {
+		case os.Args[i] == key && i < len(os.Args)-1:
+			return strings.Trim(os.Args[i+1], `"'`)
+		case strings.HasPrefix(os.Args[i], key+"="):
+			return strings.Trim(os.Args[i][len(key)+1:], `"'`)
+		}
+	}
+	return "kine"
+}()
+
 const (
 	defaultMaxIdleConns = 2 // copied from database/sql
 )
@@ -34,20 +51,20 @@ var (
 	withOldVal = withVal + ", kv.old_value"
 	revSQL     = `
 		SELECT MAX(rkv.id) AS id
-		FROM kine AS rkv`
+		FROM ` + TableName + ` AS rkv`
 
 	compactRevSQL = `
 		SELECT MAX(crkv.prev_revision) AS prev_revision
-		FROM kine AS crkv
+		FROM ` + TableName + ` AS crkv
 		WHERE crkv.name = 'compact_rev_key'`
 	listFmt = `
 		SELECT *
 		FROM (
 			SELECT (%s), (%s), %s
-			FROM kine AS kv
+			FROM ` + TableName + ` AS kv
 			JOIN (
 				SELECT MAX(mkv.id) AS id
-				FROM kine AS mkv
+				FROM ` + TableName + ` AS mkv
 				WHERE
 					mkv.name LIKE ? ESCAPE '^'
 					%%s
@@ -126,7 +143,7 @@ func (d *Generic) Migrate(ctx context.Context) {
 	var (
 		count     = 0
 		countKV   = d.queryRow(ctx, "SELECT COUNT(*) FROM key_value")
-		countKine = d.queryRow(ctx, "SELECT COUNT(*) FROM kine")
+		countKine = d.queryRow(ctx, "SELECT COUNT(*) FROM "+TableName)
 	)
 
 	if err := countKV.Scan(&count); err != nil || count == 0 {
@@ -139,7 +156,7 @@ func (d *Generic) Migrate(ctx context.Context) {
 
 	logrus.Infof("Migrating content from old table")
 	_, err := d.execute(ctx,
-		`INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
+		`INSERT INTO `+TableName+`(deleted, create_revision, prev_revision, name, value, created, lease)
 					SELECT 0, 0, 0, kv.name, kv.value, 1, CASE WHEN kv.ttl > 0 THEN 15 ELSE 0 END
 					FROM key_value kv
 						WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`)
@@ -211,7 +228,7 @@ func Open(ctx context.Context, wg *sync.WaitGroup, driverName, dataSourceName st
 	configureConnectionPooling(connPoolConfig, db, driverName)
 
 	if metricsRegisterer != nil {
-		metricsRegisterer.MustRegister(collectors.NewDBStatsCollector(db, "kine"))
+		metricsRegisterer.MustRegister(collectors.NewDBStatsCollector(db, TableName))
 	}
 
 	return &Generic{
@@ -238,28 +255,28 @@ func Open(ctx context.Context, wg *sync.WaitGroup, driverName, dataSourceName st
 
 		AfterOldValSQL: q(fmt.Sprintf(`
 			SELECT (%s), (%s), %s
-			FROM kine AS kv
+			FROM `+TableName+` AS kv
 			WHERE
 				kv.name LIKE ? ESCAPE '^' AND
 				kv.id > ?
 			ORDER BY kv.id ASC`, revSQL, compactRevSQL, withOldVal), paramCharacter, numbered),
 
 		DeleteSQL: q(`
-			DELETE FROM kine AS kv
+			DELETE FROM `+TableName+` AS kv
 			WHERE kv.id = ?`, paramCharacter, numbered),
 
 		UpdateCompactSQL: q(`
-			UPDATE kine
+			UPDATE `+TableName+`
 			SET prev_revision = ?
 			WHERE name = 'compact_rev_key'`, paramCharacter, numbered),
 
-		InsertLastInsertIDSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
+		InsertLastInsertIDSQL: q(`INSERT INTO `+TableName+`(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			values(?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
 
-		InsertSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
+		InsertSQL: q(`INSERT INTO `+TableName+`(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			values(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, paramCharacter, numbered),
 
-		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
+		FillSQL: q(`INSERT INTO `+TableName+`(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			values(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
 	}, err
 }

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/k3s-io/kine/pkg/drivers/generic"
 	"github.com/k3s-io/kine/pkg/endpoint"
 	"github.com/k3s-io/kine/pkg/metrics"
 	"github.com/k3s-io/kine/pkg/signals"
@@ -36,6 +37,13 @@ func New() *cli.App {
 			Usage:       "Storage endpoint (default is sqlite)",
 			Destination: &config.Endpoint,
 			EnvVars:     []string{"KINE_ENDPOINT"},
+		},
+		&cli.StringFlag{
+			Name:        "table-name",
+			Usage:       "Storage table name (default is kine).",
+			Value:       "kine",
+			Destination: &generic.TableName,
+			EnvVars:     []string{"KINE_TABLE_NAME"},
 		},
 		&cli.StringFlag{
 			Name:        "ca-file",

@@ -22,7 +22,7 @@ import (
 
 var (
 	schema = []string{
-		`CREATE TABLE IF NOT EXISTS kine
+		`CREATE TABLE IF NOT EXISTS ` + generic.TableName + `
 			(
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				name INTEGER,
@@ -34,12 +34,12 @@ var (
 				value BLOB,
 				old_value BLOB
 			)`,
-		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name)`,
-		`CREATE INDEX IF NOT EXISTS kine_name_id_index ON kine (name,id)`,
-		`CREATE INDEX IF NOT EXISTS kine_id_deleted_index ON kine (id,deleted)`,
-		`CREATE INDEX IF NOT EXISTS kine_prev_revision_index ON kine (prev_revision)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (name, prev_revision)`,
-		`CREATE INDEX IF NOT EXISTS kine_id_compact_rev_key_with_prev_revision_index ON kine(id, name, prev_revision) WHERE name != 'compact_rev_key' AND prev_revision != 0`,
+		`CREATE INDEX IF NOT EXISTS ` + generic.TableName + `_name_index ON ` + generic.TableName + ` (name)`,
+		`CREATE INDEX IF NOT EXISTS ` + generic.TableName + `_name_id_index ON ` + generic.TableName + ` (name,id)`,
+		`CREATE INDEX IF NOT EXISTS ` + generic.TableName + `_id_deleted_index ON ` + generic.TableName + ` (id,deleted)`,
+		`CREATE INDEX IF NOT EXISTS ` + generic.TableName + `_prev_revision_index ON ` + generic.TableName + ` (prev_revision)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS ` + generic.TableName + `_name_prev_revision_uindex ON ` + generic.TableName + ` (name, prev_revision)`,
+		`CREATE INDEX IF NOT EXISTS ` + generic.TableName + `_id_compact_rev_key_with_prev_revision_index ON ` + generic.TableName + `(id, name, prev_revision) WHERE name != 'compact_rev_key' AND prev_revision != 0`,
 	}
 )
 
@@ -81,18 +81,18 @@ func NewVariant(ctx context.Context, wg *sync.WaitGroup, driverName string, cfg 
 	dialect.LastInsertID = true
 	dialect.GetSizeSQL = `SELECT (page_count - freelist_count) * page_size FROM pragma_page_count(), pragma_freelist_count(), pragma_page_size()`
 	dialect.CompactSQL = `
-		DELETE FROM kine AS kv
+		DELETE FROM ` + generic.TableName + ` AS kv
 		WHERE
 			kv.id IN (
 				SELECT kp.prev_revision AS id
-				FROM kine AS kp
+				FROM ` + generic.TableName + ` AS kp
 				WHERE
 					kp.name != 'compact_rev_key' AND
 					kp.prev_revision != 0 AND
 					kp.id <= ?
 				UNION
 				SELECT kd.id AS id
-				FROM kine AS kd
+				FROM ` + generic.TableName + ` AS kd
 				WHERE
 					kd.deleted != 0 AND
 					kd.id <= ?

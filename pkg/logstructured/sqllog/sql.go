@@ -6,14 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/k3s-io/kine/pkg/broadcaster"
 	"github.com/k3s-io/kine/pkg/metrics"
 	"github.com/k3s-io/kine/pkg/server"
+	"github.com/klauspost/compress/zstd"
 	"github.com/sirupsen/logrus"
 )
 
@@ -617,6 +620,11 @@ func (s *SQLLog) Count(ctx context.Context, prefix, startKey string, revision in
 	return s.d.Count(ctx, prefix, startKey, revision)
 }
 
+var (
+	zstdEncoder, _ = zstd.NewWriter(nil)
+	zstdDecoder, _ = zstd.NewReader(nil)
+)
+
 func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error) {
 	e := *event
 	if e.KV == nil {
@@ -626,13 +634,30 @@ func (s *SQLLog) Append(ctx context.Context, event *server.Event) (int64, error)
 		e.PrevKV = &server.KeyValue{}
 	}
 
+	encode := func(value []byte) []byte {
+		data := make([]byte, 5, len(value)+5)
+		data[4] = 0
+		data[3] = 'd'
+		data[2] = 't'
+		data[1] = 's'
+		data[0] = 'z'
+		out := zstdEncoder.EncodeAll(value, data[5:])
+		hdr := (*reflect.SliceHeader)(unsafe.Pointer(&data))
+		if n := len(out); n <= hdr.Cap-hdr.Len {
+			hdr.Len += n
+		} else {
+			data = append([]byte("zstd\x00"), out...)
+		}
+		return data
+	}
+
 	rev, err := s.d.Insert(ctx, e.KV.Key,
 		e.Create,
 		e.Delete,
 		e.KV.CreateRevision,
 		e.PrevKV.ModRevision,
 		e.KV.Lease,
-		e.KV.Value,
+		encode(e.KV.Value),
 		e.PrevKV.Value,
 	)
 	if err != nil {
@@ -670,8 +695,27 @@ func scan(rows *sql.Rows, rev *int64, compact *int64, event *server.Event, val, 
 		}
 	}
 
+	decode := func(data []byte) ([]byte, error) {
+		if len(data) >= 5 &&
+			data[4] == 0 &&
+			data[3] == 'd' &&
+			data[2] == 't' &&
+			data[1] == 's' &&
+			data[0] == 'z' {
+			return zstdDecoder.DecodeAll(data[5:], nil)
+		}
+		return data, nil
+	}
+
 	err := rows.Scan(dests...)
 	if err != nil {
+		return err
+	}
+
+	if event.KV.Value, err = decode(event.KV.Value); err != nil {
+		return err
+	}
+	if event.PrevKV.Value, err = decode(event.PrevKV.Value); err != nil {
 		return err
 	}
 
